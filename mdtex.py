@@ -201,7 +201,10 @@ def process(input):
             elif token[0] == "newline":
                 output.append("\n")
             elif token[0] == "*":
-                output.append("\\cdot ")
+                if mathmode:
+                    output.append("\\cdot ")
+                else:
+                    output.append("*")
             elif token[0] == "escaped":
                 if token[2] != '(' and token[2] != ')':
                     output.append("\\")
@@ -252,7 +255,7 @@ def process(input):
                 else:
                     substream = takewhile(lambda tok: tok[0] != "rbracket", stream)
                     inner = generate(substream, mathmode, in_document)
-                    if len(inner) > 30:
+                    if True or len(inner) > 30:
                         # Who uses cite keys this long?
                         # Assume something else was intended
                         output.append("[")
