@@ -2,10 +2,11 @@
 
 import sys
 from itertools import takewhile
-from subprocess import call
+from subprocess import call, Popen, PIPE
 import os
 import re
 import shutil
+import time
 
 
 class Que:
@@ -318,7 +319,23 @@ open(tmp_path + ".tex", "wt", encoding="utf-8").write(output)
 
 def move_if_exists(from_path, to_path):
     if os.path.isfile(from_path):
+        # sys.stderr.write("Moving " + from_path + " to " + to_path + "\n")
         shutil.move(from_path, to_path)
+
+
+def trash(path):
+    if os.path.isfile(path + ".synctex.gz"):
+        os.remove(path + ".synctex.gz")
+    if os.path.isfile(path + ".log"):
+        os.remove(path + ".log")
+    if os.path.isfile(path + ".aux"):
+        os.remove(path + ".aux")
+    if os.path.isfile(path + ".pdf"):
+        os.remove(path + ".pdf")
+    if os.path.isfile(path + ".bbl"):
+        os.remove(path + ".bbl")
+    if os.path.isfile(path + ".blg"):
+        os.remove(path + ".blg")
 
 
 def mvtex(from_path, to_path):
@@ -326,11 +343,51 @@ def mvtex(from_path, to_path):
     move_if_exists(from_path + ".log", to_path + ".log")
     move_if_exists(from_path + ".aux", to_path + ".aux")
     move_if_exists(from_path + ".pdf", to_path + ".pdf")
+    move_if_exists(from_path + ".bbl", to_path + ".bbl")
+    move_if_exists(from_path + ".blg", to_path + ".blg")
 
 
+trash(tmp_path)
 mvtex(path, tmp_path)
 
-call(["pdflatex"] + args + [tmp_path + ".tex"])
 
+def call_and_strip(args):
+    cmd = Popen(args, stdout=PIPE, bufsize=1)
+    for line in cmd.stdout:
+        line = line.decode('utf-8').strip(" ()\n")
+        if line.startswith('/') and '.' in line[-6:]:
+            continue
+
+        if line.startswith("*geometry*") or "Driver (autodetected)" in line or "restricted \write18" in line or "entering extended mode" in line:
+            continue
+
+        if "Transcript written on" in line or "SyncTeX written on" in line or "Output written on" in line:
+            continue
+
+        if "see the transcript file for additional information" in line or line.endswith(".pfb>") or "For additional information on amsmath" in line:
+            continue
+
+        if "[Loading MPS to PDF converter" in line or "Package tocbibind Note" in line:
+            continue
+
+        if (line.startswith("<") or (line.startswith("[") and ".pdf" in line)) and (line.endswith("]") or line.endswith(">")):
+            continue
+
+        if "pdftex.map}]" in line or "uni-32.def)" in line or "/t1pcr.fd" in line:
+            continue
+
+        if "/preamble.tex" in line:
+            continue
+
+        sys.stdout.buffer.write(line.encode('utf-8'))
+        sys.stdout.buffer.write(b'\n')
+        sys.stdout.flush()
+
+
+os.environ["max_print_line"] = "10000"
+call_and_strip(["pdflatex"] + args + [tmp_path + ".tex"])
+call_and_strip(["bibtex", tmp_path])
+
+os.remove(tmp_path + ".blg")
 mvtex(tmp_path, path)
 os.remove(tmp_path + ".tex")
